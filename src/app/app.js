@@ -119,11 +119,11 @@ app.run(function($rootScope, toolbar, toolbarItems, appMenuService) {
                 $rootScope.$broadcast('api.set_disconnected_points');
             }
         },{
-            id: toolbarItems.NEW_MAP,
+            id: toolbarItems.DISABLE_MAP2,
             caption: 'Create New Map',
             icon: 'glyphicon glyphicon-duplicate',
             callback: function () {
-                $rootScope.$broadcast('newMap.create');
+                $rootScope.$broadcast('api.set_disconnected_points2');
             }
         }
 

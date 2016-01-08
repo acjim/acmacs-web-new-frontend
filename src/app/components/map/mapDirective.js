@@ -71,7 +71,7 @@ app.directive('d3Map', ['$rootScope', 'toolbar', 'toolbarItems', function($rootS
                 dataExtentX = null,
                 dataExtentY = null,
                 boxSize = 1,
-                disableArray =[],
+                disconnectArray =[],
                 color="",
                 shiftKey;
 
@@ -537,9 +537,9 @@ app.directive('d3Map', ['$rootScope', 'toolbar', 'toolbarItems', function($rootS
             /** Gets All D3 Selected Elements. This function should be called by the button responsible for Disabling nodes
              * @returns none
              */
-            function DisableSelectedElements(){
-                $rootScope.disableArray=[];
-                $rootScope.disableArrayFlag=false;
+            function DisconnectSelectedElements(){
+                $rootScope.disconnectArray=[];
+                $rootScope.disconnectArrayFlag=false;
                 var flag=0;
                 // Disable Button Functionality
                 d3.selectAll(".selected").each(function(d){
@@ -551,7 +551,7 @@ app.directive('d3Map', ['$rootScope', 'toolbar', 'toolbarItems', function($rootS
                             .style("stroke", "green")
                             .style("opacity", .4)
                             .attr("style", "fill:#bebebe;");
-                        disableArray.push(d.id);
+                        disconnectArray.push(d.id);
                         //console.log(d.id);
 
                     }
@@ -560,9 +560,9 @@ app.directive('d3Map', ['$rootScope', 'toolbar', 'toolbarItems', function($rootS
                         d3.select(this).transition()
                             .attr("style", "fill:"+color);
                         d.style.fill_color = color;
-                        for( var c=0; c < disableArray.length; c++){
-                            if (d.id== disableArray[c]){
-                                disableArray.splice(c, 1);
+                        for( var c=0; c < disconnectArray.length; c++){
+                            if (d.id== disconnectArray[c]){
+                                disconnectArray.splice(c, 1);
                                 c= c-1;
                             }
                         }
@@ -575,8 +575,8 @@ app.directive('d3Map', ['$rootScope', 'toolbar', 'toolbarItems', function($rootS
                     alert("Please Select at least One Node Before Clicking on Disable");
                 }
                 else{
-                    $rootScope.disableArrayFlag= true;
-                    $rootScope.disableArray= disableArray;
+                    $rootScope.disconnectArrayFlag= true;
+                    $rootScope.disconnectArray= disconnectArray;
                 }
             }
 
@@ -630,19 +630,14 @@ app.directive('d3Map', ['$rootScope', 'toolbar', 'toolbarItems', function($rootS
 
             /////////////////////// LISTENERS ///////////////////////
 
-            /**
-             * Watches for a node disable
-             */
-            $rootScope.$on('api.set_disconnected_points', function() {
-                DisableSelectedElements();
-            });
+
 
 
             /**
-             * Watches to Create  a new Map from Already Existing Map
+             * Watches for a Disconnect Selected Element
              */
-            $rootScope.$on('newMap.create', function() {
-                GetNewDataFromCurrentMap(scope.data);
+            $rootScope.$on('api.set_disconnected_points2', function() {
+                DisconnectSelectedElements();
             });
 
             /**

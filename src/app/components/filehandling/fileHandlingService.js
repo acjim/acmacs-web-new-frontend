@@ -45,7 +45,7 @@
             handleFileOpen: handleFileOpen,
             reOptimize: reOptimize,
             getErrorConnectionlines: getErrorConnectionlines,
-            disableNodes: disableNodes
+            disconnectNodes: disconnectNodes
         };
 
         /**
@@ -227,10 +227,10 @@
             });
         }
         /**
-         * Calls api to disable nodes from a specific  map
+         * Calls api to disconnect nodes from a specific  map
          * @param mapData
          */
-        function disableNodes(mapData, disabledPoints) {
+        function disconnectNodes(mapData, disabledPoints) {
             cfpLoadingBar.start();
 
             var disable_additional_params = {

@@ -131,12 +131,12 @@
             }
 
         });
-        /** Watches for New Map Create from Existing Map button
+        /** Watches for Disconnected Element Button
          *
          */
-        $scope.$on('newMap.create', function () {
-            if ($rootScope.newMapArrayflag == true) {
-                fileHandling.disableNodes($scope.d3Data,$rootScope.newMapArray);
+        $scope.$on('api.set_disconnected_points2', function () {
+            if ($rootScope.disconnectArrayFlag == true) {
+                fileHandling.disconnectNodes($scope.d3Data,$rootScope.disconnectArray);
             }
 
         });
