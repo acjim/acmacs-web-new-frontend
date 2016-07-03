@@ -58,6 +58,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 nodesDisconnected = false,
                 seraFlag= 0,
                 shiftKey,
+                commandKey,
                 flipMapRight= 0,
                 flipMapDown = 0,
                 indentationWidthX= 0,
@@ -92,24 +93,20 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 if (flipMapRight==1){
                     indentationWidthX = width*1.2/100;
                     indentationWidthY=-width;
-                    //var indentationWidthY = width*1.2/100;
                 }
                 else{
                     indentationWidthX = 0;
                     indentationWidthY = width;
-                    // indentationWidthY = (height*1.8)/100;
-                    // indentationWidthY= -height;
+
                 }
                 if (flipMapDown==1){
                     indentationHeightX = height*1.8/100;
                     indentationHeightY=-height;
-                    //var indentationWidthY = width*1.2/100;
+
                 }
                 else{
                     indentationHeightX = 0;
                     indentationHeightY = height;
-                    // indentationWidthY = (height*1.8)/100;
-                    // indentationWidthY= -height;
                 }
 
                 // Scaling
@@ -459,7 +456,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     .y(yScale)
                     .on("brushstart", function () {
                         nodeGroup.each(function (d) {
-                            d.previouslySelected = shiftKey && d.selected;
+                            d.previouslySelected = (shiftKey && d.selected)||(commandKey && d.selected);
                         });
                     })
                     .on("brush", function () {
@@ -769,6 +766,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                         break; // RIGHT
                 }
                 shiftKey = d3.event.shiftKey;
+                commandKey = d3.event.metaKey;
             }
 
             /**
@@ -776,6 +774,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
              */
             function keyup() {
                 shiftKey = d3.event.shiftKey;
+                commandKey = d3.event.metaKey;
             }
 
 
@@ -995,7 +994,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     renderWithoutData();
                 }
             });
-            
+
             /**
              * Listens for event to Flip Map Horizentally
              */
