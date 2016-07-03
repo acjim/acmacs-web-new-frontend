@@ -58,6 +58,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 nodesDisconnected = false,
                 seraFlag= 0,
                 shiftKey,
+                commandKey,
                 flipMapRight= 0,
                 flipMapDown = 0,
                 indentationWidthX= 0,
