@@ -849,6 +849,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
              * @returns none
              */
             function toggleNodeLabels(showLabels) {
+                console.log("helo world");
                 if (showLabels) {
                     d3.selectAll(".text").style("visibility", "visible");
                 } else {
