@@ -40,14 +40,21 @@
 
     function fileHandling($rootScope, $q, api, Flash, cfpLoadingBar, $timeout, $document) {
 
-        var acd1File = null;
-        var projection = 0;
-        var projection_comment = null;
-        var is_changed = false;
-        var original_filename = "";
-        var fixedPoints = [];
-        var disconnectedPoints = [];
-        var fileHandler = {};
+            var acd1File = null,
+            projection = 0,
+            projection_comment = null,
+            is_changed = false,
+            original_filename = "",
+            fixedPoints = [],
+            disconnectedPoints = [],
+            fileHandler = {},
+            scale = 1,
+            BlobData,
+            globalData = new Array(),
+            smoothing=0.5,
+            subData = new Array(),
+            globalsmallY,
+            globalsmallX;
 
         /**
          * Displays errors that occurred
@@ -132,6 +139,8 @@
             // get new projection before export
             return api.new_projection(additional_params, acd1_file)
                 .then(function (output) {
+                    var map_additional_params = {}; // check documentation on execute>get_map for what params can be passed
+
                     acd1_file = output.output_acd1;
                     var output_json = output.output_json;
                     var data = fs.readFileSync(output_json, 'utf8');
@@ -206,7 +215,7 @@
             // Start loading bar
             $timeout(function () {
                 cfpLoadingBar.start();
-            }, 100);
+            }, 77);
 
             if (!fs.existsSync(config.api.script)) { // If there is no AcmacsCore.bundle
                 return api.asyncTest().then(function () {
@@ -326,8 +335,11 @@
          * @param mapData
          * @returns {*}
          */
-        fileHandler.getNewProjection = function (mapData) {
-
+        fileHandler.getNewProjection = function (mapData, blobsvalue) {
+            var getblobs=false;
+            if (blobsvalue==true){
+                getblobs=true;
+            }
             cfpLoadingBar.start();
 
             var list = [];
@@ -362,7 +374,8 @@
                 }
 
                 var map_additional_params = {
-                    projection: (projection == 0) ? projection : projection_comment
+                    projection: (projection == 0) ? projection : projection_comment,
+                    blobs: getblobs
                 };
                 return api.execute(api.get_commands().GET_MAP, map_additional_params, acd1File).then(function (data) {
                     return $q.all([
@@ -390,22 +403,49 @@
             return api.relax_existing(relax_additional_params, acd1File)
                 .then(function (filename) {
                     acd1File = filename.updated_acd1;
-                    var map_additional_params = {projection: (projection == 0) ? projection : projection_comment};
-                    return api.execute(api.get_commands().GET_MAP, map_additional_params, acd1File)
-                        .then(function (filename) {
-                            return $q.all([
-                                readFile(filename)
-                            ]).then(function (data) {
-                                mapData = parseLayoutData(JSON.parse(data));
-                                fileHandler.setMapIsChanged(true);
-                                return mapData;
+                    var output_json = filename.output_json;
+                    return $q.all([
+                        readFile(output_json)
+                    ]).then(function (data) {
+                        var unprocessed_data = JSON.parse(data);
+                        var progressive_data = [];
+                        if(unprocessed_data.intermediate_layouts) {
+                            var intermediate_size = unprocessed_data.intermediate_layouts.length;
+                            var frequency = parseInt(intermediate_size / 77); // selected intermediate states so that total number of steps be 77 (77 has been selected randomly)
+                            //@TODO, write an algorithm which finds most distinguished changes to show as animation/intermediate states
+                            var count = 0;
+                            unprocessed_data.intermediate_layouts.forEach(function (layout, index) {
+                                if (index == 0 || (index % frequency) == 0 || isNaN(index % frequency) || index == intermediate_size) {
+                                    progressive_data[count] = parseLayoutData(formatDataForIntermediateLayout(unprocessed_data, index));
+                                    count++;
+                                }
                             });
-                        }, function (reason) {
-                            return errorReason(reason);
-                        });
+                        }
+                        var map = unprocessed_data.map;
+                        var map_data = {map:map[0], stress: map[0].stress};
+                        mapData = parseLayoutData((map_data));
+                        progressive_data[progressive_data.length] = mapData;
+                        fileHandler.setMapIsChanged(true);
+                        cfpLoadingBar.set(0.7);
+                        return progressive_data;
+                    });
                 }, function (reason) {
                     return errorReason(reason);
                 });
+        }
+
+        function formatDataForIntermediateLayout(data, index)
+        {
+            var map = data.map[0];
+            var map_data = {map: {}};
+            map_data.stress = data.intermediate_stresses[0][index];
+            map_data.map.layout = data.intermediate_layouts[index];
+            for (var property in map) {
+                if (map.hasOwnProperty(property) && property != 'layout') {
+                    map_data.map[property] = map[property];
+                }
+            }
+            return map_data;
         }
 
 
@@ -422,7 +462,6 @@
         function parseLayoutData(data) {
 
             var oldMap = data.map;
-
             if (_.isUndefined(oldMap)) {
                 //TODO: Throw error what went wrong
                 return {};
@@ -433,6 +472,7 @@
             newData.d3ConnectionLines = [];
             newData.d3ErrorLines = [];
             newData.stress = data.stress;
+            newData.blobs = data.blobs;
 
             oldMap.layout.forEach(function (layout, i) {
                 newData.layout[i] = {
@@ -460,6 +500,16 @@
             oldMap.styles.points.forEach(function (point, i) {
                 newData.layout[i].style = oldMap.styles.styles[point];
             });
+                // Computing blobs and centering them
+            if (data.blobs){
+                newData.blobs=computeBlobsCountour(data);
+                for (var i=0; i< newData.blobs.length; i++){
+                    for (var j= 0; j<newData.blobs[i].length; j++){
+                        newData.blobs[i][j].x+=(newData.layout[i].x);
+                        newData.blobs[i][j].y+=(newData.layout[i].y);
+                    }
+                }
+            }
 
             // checking if the drawing order is available
             if (!_.isUndefined(oldMap.styles.drawing_order)) {
@@ -480,7 +530,6 @@
                             var temp = order_list[j - 1];
                             order_list[j - 1] = order_list[j];
                             order_list[j] = temp;
-
                             // swapping the data
                             temp = newData.layout[j - 1];
                             newData.layout[j - 1] = newData.layout[j];
@@ -493,7 +542,6 @@
                 }
 
             }
-
             return newData;
         }
 
@@ -535,6 +583,9 @@
                 .then(function (filename) {
                     $rootScope.$broadcast('open-file', filename.output_acd1);
                     cfpLoadingBar.complete();
+
+
+
                 }, function (reason) {
                     return errorReason(reason);
                 });
@@ -717,7 +768,7 @@
                         y1: from.y,
                         x2: to.x,
                         y2: to.y,
-                        stroke: 'grey',
+                        stroke: colour,
                         width: 0.4,
                         opacity: 1.0
                     });
@@ -808,6 +859,206 @@
 
             return result;
         }
+
+        /**
+         * *This function computes the blobs raadi points, format data, and then returns a path
+         */
+
+        function computeBlobsCountour(dataElement){
+            var data = new Array();
+            var subData=new Array();
+            var subData2=new Array();
+            var counter=0;
+            // computing the contour for every point
+            dataElement.blobs.radii_for_points.forEach(function (d, i){
+                subData = new Array();
+                subData[counter] = pathFromPolar(dataElement.map.layout[i],d,smoothing);
+                //data[counter2]=subData;
+                data[counter]=subData;
+                counter++;
+            });
+            //formating  the data
+            for(var i=0; i< data.length; i++){
+                BlobData= data[i];
+                subData2 = new Array();
+                var k=0;
+
+                while(BlobData[0] == undefined){
+                    BlobData.splice(0, 1);
+                }
+                BlobData=BlobData[0];
+                for (var j=0; j< (BlobData.length);j++){
+                    subData2[k] = {
+                        "x": (BlobData[j][1])*scale,
+                        "y": (BlobData[j][2])*scale
+                    };
+                    if (k!=0){
+                        subData2[k+1] = {
+                            "x": (BlobData[j][3][0])*scale,
+                            "y": (BlobData[j][3][1])*scale
+                        };
+                        subData2[k+2] = {
+                            "x": (BlobData[j][4][0])*scale,
+                            "y": (BlobData[j][4][1])*scale
+                        };
+                        k=k+2;
+                    }
+                    k=k+1;
+                }
+                globalData[i] = subData2;
+            }
+            return globalData;
+    }
+
+        /**
+         * This function calculate the Blob contour and returns a path for the blob
+         * @param sera
+         * @returns {Array}
+         */
+        function pathFromPolar (point, contour, smoothing) {
+            // Local variables:
+            var
+            // The number of vertices
+                n = contour.length,
+
+            // * The list of path vertices
+                vertex = [],
+
+            // * Set a threshold for smooth edges whose appearance is indistinguishable
+            // from a straight line segment.
+                notRounded = (Math.abs(smoothing) < 1e-4),
+
+            // * Vertex index
+                i,
+
+            // * Index angle
+                alpha,
+
+            // * A disposable 2D point
+                p,
+
+            // * The resulting path
+                path = [];
+
+            // From an array of vertices, calculate the co-ordinates of the spline curve
+            // handle for the edge identified by the arguments `index` and `edge`
+            // ('leading', 'trailing').
+            function curveHandle(index, edge) {
+                var
+                    pi,
+                    ni,
+                    prev,
+                    next,
+                    o,
+                    prevLength,
+                    nextLength,
+                    prevToNext,
+                    handle,
+                    rounded = smoothing / 2 || 0; // To avoid bizarre effects at smoothing > 0.5, divide by 2
+
+                // The point whose curve handle we're calculating
+                o = vertex[index];
+
+                // Indices of previous and next points
+                if (index > 0) {
+                    pi = index - 1;
+                }
+                else {
+                    pi = n - 1;
+                }
+
+                if (index < n - 1) {
+                    ni = index + 1;
+                }
+                else {
+                    ni = 0;
+                }
+
+                // The neighbors of `o`.
+                prev = vertex[pi];
+                next = vertex[ni];
+
+                // Lengths of the edges connecting to `prev` and `next`
+                prevLength = distance(prev, o);
+                nextLength = distance(next, o);
+
+                // Length of the chord between `prev` and `next`
+                prevToNext = distance(prev, next);
+
+                if (edge === 'trailing') {
+                    handle = {
+                        x: o.x + rounded * nextLength * (next.x - prev.x) / prevToNext,
+                        y: o.y + rounded * nextLength * (next.y - prev.y) / prevToNext
+                    };
+                }
+                else {
+                    handle = {
+                        x: o.x - rounded * prevLength * (next.x - prev.x) / prevToNext,
+                        y: o.y - rounded * prevLength * (next.y - prev.y) / prevToNext
+                    };
+                }
+                return handle;
+            }
+
+            // calculate vertices
+            for (i = 0; i < n; i += 1) {
+                alpha = i * 2.0 * Math.PI / n;
+                vertex[i] = {};
+                vertex[i].x = contour[i] * Math.cos(alpha);
+                vertex[i].y = contour[i] * Math.sin(alpha);
+            }
+
+            // Calculate the first segment, starting at 12 o'clock.
+            path[0] = ["M", vertex[0].x, vertex[0].y];
+
+            // All segments between the first and the final.
+            for (i = 1; i < n; i += 1) {
+                if (notRounded) {
+                    p = vertex[i];
+                    path.push(["L", p.x, p.y]);
+                } else {
+                    p = curveHandle(i - 1, 'trailing');
+                    path.push(["C", p.x, p.y]);
+                    p = curveHandle(i, 'leading');
+                    path[path.length - 1].push([p.x, p.y]);
+                    p = vertex[i];
+                    path[path.length - 1].push([p.x, p.y]);
+                }
+            }
+
+            // The final segment
+            if (notRounded) {
+                p = vertex[0];
+                path.push(["L", p.x, p.y]);
+            } else {
+                p = curveHandle(n - 1, 'trailing');
+                path.push(["C", p.x, p.y]);
+                p = curveHandle(0, 'leading');
+                path[path.length - 1].push([p.x, p.y]);
+                p = vertex[0];
+                path[path.length - 1].push([p.x, p.y]);
+            }
+
+            // Terminate the path spec
+            path[path.length - 1].push(['z']);
+
+            return path;
+        }; // pathFromPolar
+
+        /**
+         * Calculate Euclidean distance between two points. A point is an object
+         * containing two properties named `x` and `y`.
+         *
+         * @method distance
+         * @param {SVGPoint|Object} p1
+         * @param {SVGPoint|Object} p2
+         * @return Number distance
+         */
+        function  distance(p1, p2) {
+            return Math.sqrt(
+                (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y)
+            );
+        };
 
         /**
          *

@@ -34,7 +34,11 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
             data: "="
         },
         controller: 'mapCtrl',
-        template: '<p class="stressLabel">Stress: {{(data.stress || "Undefined Value") | number: 3}}</p>',
+        template: '<p class="stressLabel">Stress: {{(data.stress || "Undefined Value") | number: 3}}</p>' +
+        '<div class=" blobs ">' +
+        '</div>',
+
+
         link: function (scope, iElement) {
 
             var svg = null,
@@ -64,7 +68,17 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 indentationWidthX= 0,
                 indentationWidthY=0,
                 indentationHeightX = 0,
-                indentationHeightY = 0;
+                indentationHeightY = 0,
+                showblobs= true,
+                loadedblobs=false,
+                scale = 1,
+                BlobData,
+                globalData = new Array(),
+                smoothing=0.5,
+                subData = new Array(),
+                globalsmallY,
+                globalsmallX,
+                lineFunction ;
 
             // d3 groups
             var boxGroup,
@@ -73,7 +87,8 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 nodeGroup,
                 errorlineGroup,
                 connectionlineGroup,
-                labelsGroup;
+                labelsGroup,
+                blobsGroup;
 
             $rootScope.zoomed_center = undefined;
 
@@ -114,6 +129,13 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 xScale = d3.scale.linear().domain([0, width]).range([indentationWidthX, indentationWidthY]);
                 yScale = d3.scale.linear().domain([0, height]).range([indentationHeightX, indentationHeightY]);
 
+               if (blobsGroup){
+                    lineFunction = d3.svg.line()
+                        .x(function(d) { return xScale(d.x); })
+                        .y(function(d) { return yScale(d.y); })
+                        .interpolate("linear");
+               }
+
                 // Zoom
                 zoom = d3.behavior.zoom()
                     .scaleExtent([minimalScaleValue, 500])
@@ -132,6 +154,12 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
 
                     if (labelsGroup) {
                         labelsGroup.attr("transform", function (d) {
+                            return "translate(" + xScale(d.x) + "," + yScale(d.y) + ")";
+                        });
+                    }
+
+                    if (nodeGroup) {
+                        nodeGroup.attr("transform", function (d) {
                             return "translate(" + xScale(d.x) + "," + yScale(d.y) + ")";
                         });
                     }
@@ -162,21 +190,40 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
 
                 // Enter
                 nodeGroup = nodeGroup.data(data.layout);
+                scope.data.stress = data.stress;
 
                 nodeGroup.enter().append("path")
                     .attr("class", "point")
-                    .attr("id", function(d) {
-                        return 'full-name-'+d.name;
+                    .attr("id", function (d) {
+                        return 'full-name-' + d.name;
                     })
-                    .attr("full_name", function(d){
+                    .attr("full_name", function (d) {
                         return d.name;
                     });
 
                 //Update
                 nodeGroup
+                    .transition()  // Transition from old to new
+                    .duration(1500)
+                    .delay(function(d, i) {
+                        return 5;  // Dynamic delay (i.e. each item delays a little longer)
+                    })
                     .attr("transform", function (d) {
                         return "translate(" + xScale(d.x) + "," + yScale(d.y) + ")";
                     })
+                    .attr("cx", function(d) {
+                        return xScale(d[0]);  // Circle's X
+                    })
+                    .attr("cy", function(d) {
+                        return yScale(d[1]);  // Circle's Y
+                    })
+                    .each("end", function() {  // End animation
+                        d3.select(this)  // 'this' means the current element
+                            .transition()
+                            .duration(1000);
+
+                    })
+
                     .attr("fill", function (d) {
                         if (d.fixed || d.disconnected) {
                             return "#bebebe";
@@ -266,15 +313,15 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     .attr("y", function (d) {
                         return d.y;
                     })
-                    .style("visibility", "hidden")
                     .style("font-family", "sans-serif")
                     .style("font-size", "10px")
+                    .style("visibility", "hidden")
                     .style("fill", "#330066")
                     .text(function (d) {
                         return d.name;
-                    });
+                    }
+                    );
                 labelsGroup.exit().remove();
-
 
                 errorlineGroup = errorlineGroup.data(data.d3ErrorLines);
                 errorlineGroup.enter().append("line")
@@ -302,6 +349,46 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     }));
                 errorlineGroup.exit().remove();
 
+               //This is the accessor function we talked about above
+
+
+
+              /*  for (var i=0; i<data.blobs.length; i++ ){
+                    svg.append("path")
+                        .attr("d", lineFunction(data.blobs[i]))
+                        .attr("stroke", "black")
+                        .attr("stroke-width", 1)
+                        .attr("fill", "orange")
+                        .attr("class", "blobs")
+                        .style("opacity", 0.55)
+                        .style("visibility", "hidden")
+                        .on("click", function(d){
+                            console.log(d.x);
+
+                        });
+
+                }*/
+
+
+                if (data.blobs) {
+                    blobsGroup = blobsGroup.data(data.blobs);
+
+                    blobsGroup.enter().append("path")
+                        .attr("d", function (d) {
+                            return lineFunction(d);
+                        })
+
+                        .attr("stroke", "black")
+                        .attr("stroke-width", 1)
+                        .attr("fill", "orange")
+                        .attr("class", "blobs")
+                        .style("opacity", 0.4)
+                        .style("visibility", "visible")
+                    ;
+                    blobsGroup.exit().remove();
+                }
+
+
                 connectionlineGroup = connectionlineGroup.data(data.d3ConnectionLines);
                 connectionlineGroup.enter().append("line")
                     .attr("class", "connectionline")
@@ -324,6 +411,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                         return d.width;
                     }));
                 connectionlineGroup.exit().remove();
+
 
             }
 
@@ -429,6 +517,10 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 connectionlineGroup = elementGroup.append("g")
                     .attr("class", "connectionline")
                     .selectAll(".connectionline");
+
+                blobsGroup = elementGroup.append("g")
+                    .attr("class", "blobslines")
+                    .selectAll(".blobs");
 
                 errorlineGroup = elementGroup.append("g")
                     .attr("class", "errorline")
@@ -686,6 +778,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 labelsGroup.attr("transform", function (d) {
                     return "translate(" + xScale(d.x) + ", " + yScale(d.y) + ")";
                 });
+
                 errorlineGroup
                     .attr("x1", (function (d) {
                         return xScale(d.x1);
@@ -699,6 +792,10 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     .attr("y2", (function (d) {
                         return yScale(d.y2);
                     }));
+
+                blobsGroup.attr("d", (function (d) {
+                    return lineFunction(d);
+                }))
 
                 connectionlineGroup
                     .attr("x1", (function (d) {
@@ -876,11 +973,60 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
              * @returns none
              */
             function toggleNodeLabels(showLabels) {
-                if (showLabels) {
-                    d3.selectAll(".text").style("visibility", "visible");
-                } else {
-                    d3.selectAll(".text").style("visibility", "hidden");
+                var selectedNodes = getSelectedNodes('labelsGroup');
+                if(!selectedNodes){
+                    if (showLabels) {
+                        d3.selectAll(".text").style("visibility", "visible");
+                    } else {
+                        d3.selectAll(".text").style("visibility", "hidden");
+                    }
+                    return true;
+                } else{
+                    var selectedTextNodes = selectedNodes;
+                    // if (showLabels) {
+                    selectedTextNodes.each(function(){
+                        var temp = d3.select(this);
+                        if(temp.style("visibility")=='hidden'){
+                            temp.style("visibility","visible");
+                        } else{
+                            temp.style("visibility","hidden");
+                        }
+                    });
+                    // } else {
+                    //     selectedTextNodes.style("visibility", "hidden");
+                    // }
+                    return false
                 }
+            }
+            /*
+             ** Returns selected nodes for [labelsGroup,nodeGroup] or false
+             **
+             */
+            function getSelectedNodes(type,returnMappedValue){
+                var selectedGroup;
+                switch(type){
+                    case 'nodeGroup':
+                        selectedGroup = nodeGroup;
+                        break;
+                    case 'labelsGroup':
+                        selectedGroup = labelsGroup;
+                        break;
+                    default:
+                        return false;
+                }
+                var mappedValue = [];
+                var selectedNodes = selectedGroup.filter(function(d) {
+                    if(d.selected){
+                        mappedValue.push(d.id);
+                    }
+                    return d.selected;
+                });
+                if(returnMappedValue){
+                    return mappedValue;
+                }
+                if(selectedNodes.size()){ // Using falsy value technique to get selected nodes
+                    return selectedNodes;
+                } return false;
             }
             /**
              * flips nodes depending on the selected points and the X,Y coordinate
@@ -958,6 +1104,40 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     orderedSera.push(indexOfSerra);
                 });
                 return orderedSera;
+            }
+            /**
+             * computes the nodes and features them
+             * @returns none
+             */
+            scope.displayBlobs = function () {
+                if (showblobs) {
+                    d3.selectAll(".blobs").style("visibility", "visible");
+                    showblobs=false;
+                    selectAllNodes();
+                    d3.selectAll(".point").style("visibility", "hidden");
+                    deselectNodes();
+
+                } else {
+                    d3.selectAll(".blobs").style("visibility", "hidden");
+                    showblobs=true;
+                    selectAllNodes();
+                    d3.selectAll(".point").style("visibility", "visible");
+                    deselectNodes();
+                }
+            }
+            /**
+             * checks if blobs are loaded from the backend or not
+             * @returns boolean
+             */
+            scope.blobsLoaded = function () {
+                return loadedblobs;
+            }
+            /**
+             * Sets the right flag if bloabs are loaded from the backend
+             * @returns none
+             */
+            scope.setBloabsFlag = function (trueorfalse) {
+                 loadedblobs= trueorfalse;
             }
 
             /**
@@ -1064,6 +1244,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                     }
                 });
                 scope.pointsMoved = true;
+
                 if (connection_visible){
                     scope.$emit('map.showConnectionLines');
                 }
@@ -1073,6 +1254,7 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
                 if(!connection_visible && !error_visible){
                     scope.$emit('map.nudgeTriggeredOnLine',avoidErrorLineCalculation);
                 }
+                scope.pointsMoved = true;
                 cfpLoadingBar.complete();
             });
             /**
@@ -1130,7 +1312,25 @@ app.directive('d3Map', ['$rootScope', '$window', '$timeout', 'toolbar', 'toolbar
              */
             scope.$watch('data', function (newVals) {
                 if (!_.isUndefined(newVals)) {
-                    renderWithData(newVals);
+                    if(_.isArray(newVals)) {
+                        cfpLoadingBar.set(0.7);
+                        var size = newVals.length;
+                        var count = 0;
+                        _.each(newVals, function(newVal) {
+                            $timeout(function () {
+                                renderWithData(newVal);
+                                count++;
+                                if(size == count) {
+                                    scope.data = newVal;
+                                    scope.data.stress = newVal.stress;
+                                    cfpLoadingBar.complete();
+                                }
+                            }, 2000);
+                        })
+                    }
+                    else {
+                        renderWithData(newVals);
+                    }
                 }
             }, true);
         }
